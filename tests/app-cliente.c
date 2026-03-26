@@ -2,44 +2,9 @@
  * @file app-cliente.c
  * @brief Plan de pruebas del servicio de tuplas.
  *
- * Este fichero es idéntico para la versión NO distribuida y la
- * DISTRIBUIDA: solo invoca funciones de la API definida en claves.h
- * y no contiene ninguna referencia a colas de mensajes POSIX.
- *
- * Plan de pruebas
- * ───────────────
- * Grupo 1 – Operaciones básicas con éxito
- *   1.1  destroy()          → limpiar el estado inicial
- *   1.2  set_value()        → insertar una tupla válida
- *   1.3  exist()            → comprobar existencia (debe existir)
- *   1.4  exist()            → comprobar existencia (no debe existir)
- *   1.5  get_value()        → recuperar y verificar todos los campos
- *   1.6  modify_value()     → modificar y verificar cambios
- *
- * Grupo 2 – Casos de error lógico (-1)
- *   2.1  set_value() con clave duplicada
- *   2.2  set_value() con N_value2 > 32
- *   2.3  set_value() con N_value2 = 0
- *   2.4  set_value() con value1 de 256 caracteres (fuera de rango)
- *   2.5  get_value() con clave inexistente
- *   2.6  modify_value() con clave inexistente
- *   2.7  delete_key() con clave inexistente
- *   2.8  Punteros NULL en set_value / get_value / modify_value
- *
- * Grupo 3 – Pruebas de comunicación (solo versión distribuida)
- *   [Nota: en la versión NO distribuida las funciones devuelven -1,
- *    no -2, ante parámetros NULL; el grupo 3 distingue -2 de -1.]
- *   3.1  Verificar que la llamada devuelve -2 si el servidor no está
- *        arrancado (solo observable en versión distribuida).
- *        → Aquí se documenta el comportamiento esperado.
- *
- * Grupo 4 – delete_key y comprobación posterior
- *   4.1  delete_key() con clave existente
- *   4.2  exist() sobre la clave recién borrada (debe devolver 0)
- *
- * Grupo 5 – destroy() con datos persistentes
- *   5.1  Insertar varias tuplas y luego llamar a destroy()
- *   5.2  Verificar que las claves han desaparecido
+ * Este fichero ejecuta distintas pruebas usando la API definida
+ * en claves.h. Sirve tanto para la versión distribuida como la
+ * no distribuida, ya que no depende directamente de colas POSIX.
  */
 
 #include <stdio.h>
@@ -47,18 +12,17 @@
 #include <string.h>
 #include "claves.h"
 
-/* ------------------------------------------------------------------ */
-/*  Macros de ayuda para imprimir resultados                            */
-/* ------------------------------------------------------------------ */
 
-/** Imprime [OK] si @p cond es verdadera, [ERROR] en caso contrario. */
+/* -------------------------------------------------------------- */
+/* Macros auxiliares para mostrar resultados                      */
+/* -------------------------------------------------------------- */
+
 #define ASSERT(cond, msg) \
     do { \
         if (cond) printf("  [OK]    " msg "\n"); \
         else      printf("  [ERROR] " msg "\n"); \
     } while (0)
 
-/** Imprime [OK] si @p ret == @p esperado. */
 #define ASSERT_RET(ret, esperado, msg) \
     do { \
         if ((ret) == (esperado)) \
@@ -68,34 +32,49 @@
                    (esperado), (ret)); \
     } while (0)
 
-/* ------------------------------------------------------------------ */
-/*  main                                                                */
-/* ------------------------------------------------------------------ */
 
+/* -------------------------------------------------------------- */
+/* main                                                           */
+/* -------------------------------------------------------------- */
+/**
+ * @brief Plan de pruebas del servicio de tuplas.
+ *
+ * Este fichero ejecuta distintas pruebas usando la API definida
+ * en claves.h. Sirve tanto para la versión distribuida como la
+ * no distribuida, ya que no depende directamente de colas POSIX.
+ *
+ * Se comprueban:
+ *  - Grupo 1: Operaciones básicas correctas
+ *  - Grupo 2: Casos de error lógico (-1)
+ *  - Grupo 3: Pruebas de comunicación (solo versión distribuida)
+ *  - Grupo 4: Borrado de claves (delete_key)
+ *  - Grupo 5: destroy() con datos existentes
+ */
 int main(void) {
-    printf("╔══════════════════════════════════════════════╗\n");
-    printf("║     Plan de Pruebas — Servicio de Tuplas     ║\n");
-    printf("╚══════════════════════════════════════════════╝\n\n");
+    printf("--------------------------------------------------\n");
+    printf(" Plan de pruebas - Servicio de Tuplas\n");
+    printf("--------------------------------------------------\n\n");
 
-    /* ── Datos de prueba comunes ─────────────────────────────────── */
-    char *key1    = "clave1";
-    char *val1    = "valor_string_1";
-    int   n2      = 3;
-    float v2[]    = {1.1f, 2.2f, 3.3f};
+    /* Datos comunes de prueba */
+    char *key1 = "clave1";
+    char *val1 = "valor_string_1";
+
+    int n2 = 3;
+    float v2[] = {1.1f, 2.2f, 3.3f};
+
     struct Paquete p = {10, 20, 30};
 
-    /* Buffers de salida reutilizables para get_value */
-    char  res_val1[256];
-    int   res_n2;
+    char res_val1[256];
+    int res_n2;
     float res_v2[32];
     struct Paquete res_p;
+
     int ret;
 
 
-    /* ════════════════════════════════════════════════════════════ */
-    printf("── Grupo 1: Operaciones básicas con éxito ──────────\n");
-    /* ════════════════════════════════════════════════════════════ */
-
+    /* ---------------------------------------------------------- */
+    printf("Grupo 1 - Operaciones básicas\n");
+    /* ---------------------------------------------------------- */
     /* 1.1 destroy */
     ret = destroy();
     ASSERT_RET(ret, 0, "1.1 destroy() limpia el estado inicial");
@@ -114,29 +93,30 @@ int main(void) {
 
     /* 1.5 get_value y verificar todos los campos */
     ret = get_value(key1, res_val1, &res_n2, res_v2, &res_p);
-    ASSERT_RET(ret, 0, "1.5 get_value() devuelve 0 (exito)");
-    ASSERT(strcmp(res_val1, val1) == 0,       "    value1 coincide");
-    ASSERT(res_n2 == n2,                       "    N_value2 coincide");
-    ASSERT(res_v2[0] > 1.0f && res_v2[0] < 1.2f, "    V_value2[0] ~ 1.1");
+    ASSERT_RET(ret, 0, "1.5 get_value() correcto");
+    ASSERT(strcmp(res_val1, val1) == 0, "value1 coincide");
+    ASSERT(res_n2 == n2, "N_value2 coincide");
+    ASSERT(res_v2[0] > 1.0f && res_v2[0] < 1.2f, "vector correcto");
     ASSERT(res_p.x == 10 && res_p.y == 20 && res_p.z == 30,
-           "    Paquete (x,y,z) coincide");
+           "estructura correcta");
 
     /* 1.6 modify_value y verificar cambios */
     char *new_val1 = "valor_modificado";
     float new_v2[] = {9.9f, 2.2f, 3.3f};
     struct Paquete new_p = {100, 200, 300};
+
     ret = modify_value(key1, new_val1, n2, new_v2, new_p);
-    ASSERT_RET(ret, 0, "1.6 modify_value() devuelve 0");
+    ASSERT_RET(ret, 0, "1.6 modify_value() correcto");
+
     get_value(key1, res_val1, &res_n2, res_v2, &res_p);
-    ASSERT(strcmp(res_val1, new_val1) == 0, "    value1 actualizado");
-    ASSERT(res_v2[0] > 9.8f,               "    V_value2[0] actualizado");
-    ASSERT(res_p.x == 100,                  "    Paquete.x actualizado");
+    ASSERT(strcmp(res_val1, new_val1) == 0, "value1 actualizado");
+    ASSERT(res_v2[0] > 9.8f, "vector actualizado");
+    ASSERT(res_p.x == 100, "estructura actualizada");
 
 
-    /* ════════════════════════════════════════════════════════════ */
-    printf("\n── Grupo 2: Casos de error lógico (-1) ─────────────\n");
-    /* ════════════════════════════════════════════════════════════ */
-
+    /* ---------------------------------------------------------- */
+    printf("\nGrupo 2 - Casos de error (-1)\n");
+    /* ---------------------------------------------------------- */
     /* 2.1 Clave duplicada */
     ret = set_value(key1, "duplicado", 1, v2, p);
     ASSERT_RET(ret, -1, "2.1 set_value() clave duplicada -> -1");
@@ -188,25 +168,19 @@ int main(void) {
     ASSERT_RET(ret, -1, "2.8f exist() key=NULL -> -1");
 
 
-    /* ════════════════════════════════════════════════════════════ */
-    printf("\n── Grupo 3: Comportamiento ante errores IPC (MQ) ───\n");
-    /* ════════════════════════════════════════════════════════════ */
-
+    /* ---------------------------------------------------------- */
+    printf("\nGrupo 3 - Comprobaciones IPC (solo distribuida)\n");
+    /* ---------------------------------------------------------- */
     /*
-     * NOTA: las pruebas de este grupo solo son observables en la
-     * versión DISTRIBUIDA (app-cliente-mq enlazado con libproxyclaves.so).
-     * En la versión no distribuida todas las llamadas resuelven
-     * localmente y nunca devuelven -2.
+     * Estas pruebas solo son observables en la versión DISTRIBUIDA, pues
+     * la no distribuida resuelve las llamadas localmente y no devuelven -2.
      *
      * Cómo reproducir el error -2 manualmente:
      *   1. Compilar con: make app-cliente-mq
      *   2. NO iniciar el servidor (./servidor_mq).
      *   3. Ejecutar: ./app-cliente-mq
-     *      → Todas las llamadas deben devolver -2 (cola del servidor
+     *        Todas las llamadas deben devolver -2 (cola del servidor
      *        inexistente: mq_open falla con ENOENT).
-     *
-     * La prueba 3.1 documenta este comportamiento esperado.
-     * El valor -2 diferencia "servidor no arrancado" de "-1 lógico".
      */
     printf("  [INFO] Prueba 3.1: Servidor no arrancado\n");
     printf("         En version distribuida sin servidor activo,\n");
@@ -228,10 +202,9 @@ int main(void) {
     printf("         -> Proxy debe devolver -2.\n");
 
 
-    /* ════════════════════════════════════════════════════════════ */
-    printf("\n── Grupo 4: delete_key y comprobación posterior ────\n");
-    /* ════════════════════════════════════════════════════════════ */
-
+    /* ---------------------------------------------------------- */
+    printf("\nGrupo 4 - delete_key\n");
+    /* ---------------------------------------------------------- */
     /* 4.1 Borrar clave existente */
     ret = delete_key(key1);
     ASSERT_RET(ret, 0, "4.1 delete_key() clave existente -> 0");
@@ -241,10 +214,9 @@ int main(void) {
     ASSERT_RET(ret, 0, "4.2 exist() tras delete -> 0");
 
 
-    /* ════════════════════════════════════════════════════════════ */
-    printf("\n── Grupo 5: destroy() con datos persistentes ───────\n");
-    /* ════════════════════════════════════════════════════════════ */
-
+    /* ---------------------------------------------------------- */
+    printf("\nGrupo 5 - destroy con varias claves\n");
+    /* ---------------------------------------------------------- */
     /* 5.1 Insertar varias claves */
     set_value("a1", "val_a1", 1, v2, p);
     set_value("a2", "val_a2", 2, v2, p);
@@ -259,8 +231,9 @@ int main(void) {
            "    Las tres claves han desaparecido tras destroy()");
 
 
-    printf("\n╔══════════════════════════════════════════════╗\n");
-    printf("║          Plan de Pruebas Finalizado          ║\n");
-    printf("╚══════════════════════════════════════════════╝\n");
+    printf("\n--------------------------------------------------\n");
+    printf(" Fin del plan de pruebas\n");
+    printf("--------------------------------------------------\n");
+
     return 0;
 }
