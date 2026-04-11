@@ -13,10 +13,7 @@
 #include "claves.h"
 
 
-/* -------------------------------------------------------------- */
-/* Macros auxiliares para mostrar resultados                      */
-/* -------------------------------------------------------------- */
-
+/* ---- Macros auxiliares para mostrar resultados ---- */
 #define ASSERT(cond, msg) \
     do { \
         if (cond) printf("  [OK]    " msg "\n"); \
@@ -33,9 +30,7 @@
     } while (0)
 
 
-/* -------------------------------------------------------------- */
-/* main                                                           */
-/* -------------------------------------------------------------- */
+/* ---- main ---- */
 /**
  * @brief Plan de pruebas del servicio de tuplas.
  *
